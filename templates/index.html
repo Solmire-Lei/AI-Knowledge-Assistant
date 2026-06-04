@@ -1,0 +1,30 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <title>AI Knowledge Assistant</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+    <div class="container">
+        <h1>AI Knowledge Assistant</h1>
+        <p class="subtitle">基于 DeepSeek API 的智能问答助手</p>
+
+        <form method="POST" class="chat-form">
+            <textarea 
+                name="question" 
+                placeholder="请输入你的问题，例如：什么是RAG？"
+                required>{{ question }}</textarea>
+
+            <button type="submit">发送</button>
+        </form>
+
+        {% if answer %}
+        <div class="answer-box">
+            <h2>AI 回答</h2>
+            <p>{{ answer }}</p>
+        </div>
+        {% endif %}
+    </div>
+</body>
+</html>
