@@ -1,30 +1,472 @@
 <!DOCTYPE html>
 <html lang="zh-CN">
 <head>
-    <meta charset="UTF-8">
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>AI Knowledge Assistant</title>
     <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+    <script src="https://cdn.jsdelivr.net/npm/tsparticles@2/tsparticles.bundle.min.js"></script>
 </head>
 <body>
-    <div class="container">
-        <h1>AI Knowledge Assistant</h1>
-        <p class="subtitle">基于 DeepSeek API 的智能问答助手</p>
+    <div id="particles"></div>
 
-        <form method="POST" class="chat-form">
-            <textarea 
-                name="question" 
-                placeholder="请输入你的问题，例如：什么是RAG？"
-                required>{{ question }}</textarea>
+    <div class="page-shell">
+        <header class="hero">
+            <div class="badge"><span class="badge-dot"></span><span data-i18n="badge">AI Knowledge Base Retrieval</span></div>
+            <h1 id="kbTitle">AI 知识库检索助手</h1>
+            <p class="subtitle" data-i18n="subtitle">不只是和大模型聊天，而是让 AI 先检索你的专属资料，再基于知识库生成更可靠、更贴合项目内容的回答。</p>
+            <div class="feature-grid">
+                <div class="feature-card"><h3 data-i18n="feature1Title">知识库优先</h3><p data-i18n="feature1Text">先从你的文档中检索相关内容，再交给 DeepSeek 组织答案。</p></div>
+                <div class="feature-card"><h3 data-i18n="feature2Title">长期记忆</h3><p data-i18n="feature2Text">对话会保存到本地 JSON 文件，重启终端后仍可读取。</p></div>
+                <div class="feature-card"><h3 data-i18n="feature3Title">个性化回答</h3><p data-i18n="feature3Text">可以选择 AI 的语气、角色和回答风格。</p></div>
+            </div>
+        </header>
 
-            <button type="submit">发送</button>
-        </form>
+        <main class="app-layout">
+            <section class="control-panel glass-card">
+                <div class="setting-group">
+                    <label for="knowledgeName" data-i18n="kbNameLabel">知识库名称</label>
+                    <input id="knowledgeName" class="text-input" type="text" placeholder="" />
+                </div>
 
-        {% if answer %}
-        <div class="answer-box">
-            <h2>AI 回答</h2>
-            <p>{{ answer }}</p>
-        </div>
-        {% endif %}
+                <div class="setting-group">
+                    <label for="language" data-i18n="languageLabel">语言</label>
+                    <select id="language">
+                        <option value="zh">中文</option>
+                        <option value="en">English</option>
+                    </select>
+                </div>
+
+                <div class="setting-group">
+                    <label for="personality" data-i18n="personalityLabel">AI 性格</label>
+                    <select id="personality">
+                        <option value="professional" data-label-zh="专业助手" data-label-en="Professional Assistant">专业助手</option>
+                        <option value="mentor" data-label-zh="温柔导师" data-label-en="Patient Mentor">温柔导师</option>
+                        <option value="concise" data-label-zh="高效极简" data-label-en="Concise Expert">高效极简</option>
+                        <option value="academic" data-label-zh="学术严谨" data-label-en="Academic Expert">学术严谨</option>
+                        <option value="pm" data-label-zh="产品经理风格" data-label-en="Product Manager">产品经理风格</option>
+                        <option value="coding" data-label-zh="编程老师" data-label-en="Coding Teacher">编程老师</option>
+                    </select>
+                </div>
+
+                <div class="setting-group">
+                    <label for="answerStyle" data-i18n="answerStyleLabel">回答长度</label>
+                    <select id="answerStyle">
+                        <option value="standard" data-label-zh="标准" data-label-en="Standard">标准</option>
+                        <option value="short" data-label-zh="简短" data-label-en="Short">简短</option>
+                        <option value="detailed" data-label-zh="详细" data-label-en="Detailed">详细</option>
+                    </select>
+                </div>
+
+                <div class="setting-group">
+                    <label for="mode" data-i18n="modeLabel">回答模式</label>
+                    <select id="mode">
+                        <option value="knowledge" data-label-zh="知识库增强" data-label-en="Knowledge-Enhanced">知识库增强</option>
+                        <option value="deepseek" data-label-zh="直接 DeepSeek" data-label-en="Direct DeepSeek">直接 DeepSeek</option>
+                    </select>
+                </div>
+
+                <div class="upload-box">
+                    <h4 data-i18n="uploadTitle">上传 PDF 到知识库</h4>
+                    <p data-i18n="uploadDesc">上传后，AI 会基于你的资料进行检索问答。</p>
+                    <label class="upload-area" for="pdfInput">
+                        <input id="pdfInput" type="file" accept=".pdf" hidden />
+                        <div class="upload-icon">PDF</div>
+                        <div>
+                            <strong id="uploadFileName" data-i18n="uploadHint">点击选择 PDF 文件</strong>
+                            <small data-i18n="uploadSmall">支持课程资料、论文、项目文档</small>
+                        </div>
+                    </label>
+                    <button id="uploadBtn" class="secondary-btn" type="button" data-i18n="uploadBtn">上传并构建知识库</button>
+                    <div id="uploadStatus" class="upload-status"></div>
+                </div>
+
+                <div class="diff-box">
+                    <h4 data-i18n="diffTitle">项目说明</h4>
+                    <p data-i18n="diffText">这个工具会先检索你上传的 PDF，再结合长期对话记忆和 AI 性格生成回答。</p>
+                </div>
+            </section>
+
+            <section class="chat-panel glass-card">
+                <div class="chat-header">
+                    <div>
+                        <h2 id="chatPanelTitle">AI 知识库 Chat</h2>
+                        <p data-i18n="chatDesc">输入问题，让 AI 从你的知识库中寻找答案。</p>
+                    </div>
+                    <button class="ghost-btn" type="button" onclick="clearChat()" data-i18n="clearChat">清空对话</button>
+                </div>
+
+                <div id="chatBox" class="chat-box"></div>
+
+                <div class="quick-prompts">
+                    <button type="button" onclick="usePromptByKey('prompt1')" data-i18n="prompt1">总结知识库</button>
+                    <button type="button" onclick="usePromptByKey('prompt2')" data-i18n="prompt2">提取重点</button>
+                    <button type="button" onclick="usePromptByKey('prompt3')" data-i18n="prompt3">新手解释</button>
+                </div>
+
+                <form id="chatForm" class="input-area">
+                    <textarea id="questionInput" placeholder="输入你的问题"></textarea>
+                    <button type="submit" class="send-btn"><span data-i18n="send">发送</span></button>
+                </form>
+            </section>
+        </main>
     </div>
+
+    <script>
+        if (window.tsParticles) {
+            tsParticles.load("particles", {
+                background: { color: { value: "transparent" } },
+                fpsLimit: 60,
+                particles: {
+                    number: { value: 90, density: { enable: true, area: 900 } },
+                    color: { value: ["#ffffff", "#7dd3fc", "#a78bfa"] },
+                    shape: { type: "circle" },
+                    opacity: { value: 0.45, random: true },
+                    size: { value: { min: 1, max: 3 } },
+                    links: { enable: true, distance: 145, color: "#ffffff", opacity: 0.18, width: 1 },
+                    move: { enable: true, speed: 1.2, outModes: { default: "out" } }
+                },
+                interactivity: {
+                    events: { onHover: { enable: true, mode: "grab" }, onClick: { enable: true, mode: "push" }, resize: true },
+                    modes: { grab: { distance: 180, links: { opacity: 0.55 } }, push: { quantity: 4 } }
+                },
+                detectRetina: true
+            });
+        }
+
+        const STORAGE_KEYS = { settings: "ai_kb_settings" };
+
+        const i18n = {
+            zh: {
+                badge: "AI Knowledge Base Retrieval",
+                defaultKbName: "AI 知识库检索助手",
+                subtitle: "不只是和大模型聊天，而是让 AI 先检索你的专属资料，再基于知识库生成更可靠、更贴合项目内容的回答。",
+                feature1Title: "知识库优先",
+                feature1Text: "先从你的文档中检索相关内容，再交给 DeepSeek 组织答案。",
+                feature2Title: "长期记忆",
+                feature2Text: "对话会保存到本地 JSON 文件，重启终端后仍可读取。",
+                feature3Title: "个性化回答",
+                feature3Text: "可以选择 AI 的语气、角色和回答风格。",
+                kbNameLabel: "知识库名称",
+                languageLabel: "语言",
+                personalityLabel: "AI 性格",
+                answerStyleLabel: "回答长度",
+                modeLabel: "回答模式",
+                uploadTitle: "上传 PDF 到知识库",
+                uploadDesc: "上传后，AI 会基于你的资料进行检索问答。",
+                uploadHint: "点击选择 PDF 文件",
+                uploadSmall: "支持课程资料、论文、项目文档",
+                uploadBtn: "上传并构建知识库",
+                diffTitle: "项目说明",
+                diffText: "这个工具会先检索你上传的 PDF，再结合长期对话记忆和 AI 性格生成回答。",
+                clearChat: "清空对话",
+                chatDesc: "输入问题，让 AI 从你的知识库中寻找答案。",
+                prompt1: "总结知识库",
+                prompt2: "提取重点",
+                prompt3: "新手解释",
+                prompt1Text: "这个知识库主要讲了什么？",
+                prompt2Text: "请根据资料提取重点内容",
+                prompt3Text: "请用适合新手的方式解释这个问题",
+                send: "发送",
+                placeholder: "输入你的问题",
+                welcome: "你好，我是你的 AI 知识库检索助手。你可以上传 PDF，也可以直接问我和知识库有关的问题。",
+                loading: "正在检索知识库并生成回答...",
+                requestError: "请求失败。请检查 app.py 是否正在运行，以及 /ask 接口是否正常。",
+                clearDone: "对话已清空。你可以继续提问新的知识库问题。",
+                choosePdfFirst: "请先选择一个 PDF 文件。",
+                uploading: "正在上传并构建知识库...",
+                uploadSuccess: "上传成功，知识库已更新。",
+                uploadFail: "上传失败，请检查后端上传接口。",
+                uploadError: "上传出错，请检查 /upload 接口是否正常。",
+                uploadedPrefix: "PDF 已上传：",
+                uploadedSuffix: "现在你可以开始围绕这个文档提问。",
+                aiAvatar: "AI",
+                userAvatar: "我"
+            },
+            en: {
+                badge: "AI Knowledge Base Retrieval",
+                defaultKbName: "AI Knowledge Assistant",
+                subtitle: "More than a chatbot. It retrieves your own documents first, then generates answers grounded in your knowledge base.",
+                feature1Title: "Knowledge-first",
+                feature1Text: "Retrieve relevant content from your documents before generating the final answer.",
+                feature2Title: "Persistent Memory",
+                feature2Text: "Conversations are saved to a local JSON file and can be loaded after restarting the terminal.",
+                feature3Title: "Personalized",
+                feature3Text: "Customize the assistant's tone, role, and answer style.",
+                kbNameLabel: "Knowledge Base Name",
+                languageLabel: "Language",
+                personalityLabel: "AI Personality",
+                answerStyleLabel: "Answer Length",
+                modeLabel: "Answer Mode",
+                uploadTitle: "Upload PDF",
+                uploadDesc: "After uploading, the assistant can answer based on your documents.",
+                uploadHint: "Click to choose a PDF",
+                uploadSmall: "Supports course files, papers, and project documents",
+                uploadBtn: "Upload and Build",
+                diffTitle: "Project Notes",
+                diffText: "This tool retrieves your uploaded PDF first, then generates answers using persistent memory and a selected AI personality.",
+                clearChat: "Clear Chat",
+                chatDesc: "Ask a question and let AI search your knowledge base.",
+                prompt1: "Summarize",
+                prompt2: "Extract key points",
+                prompt3: "Beginner explanation",
+                prompt1Text: "What is this knowledge base mainly about?",
+                prompt2Text: "Please extract the key points from the materials.",
+                prompt3Text: "Please explain this in a beginner-friendly way.",
+                send: "Send",
+                placeholder: "Ask your question",
+                welcome: "Hi, I am your AI knowledge base assistant. You can upload PDFs or ask questions about your knowledge base.",
+                loading: "Searching the knowledge base and generating an answer...",
+                requestError: "Request failed. Please check whether app.py is running and whether /ask works.",
+                clearDone: "Chat cleared. You can ask a new question.",
+                choosePdfFirst: "Please choose a PDF file first.",
+                uploading: "Uploading and building the knowledge base...",
+                uploadSuccess: "Upload successful. Knowledge base updated.",
+                uploadFail: "Upload failed. Please check your backend upload endpoint.",
+                uploadError: "Upload error. Please check whether /upload works.",
+                uploadedPrefix: "PDF uploaded: ",
+                uploadedSuffix: "You can now ask questions about this document.",
+                aiAvatar: "AI",
+                userAvatar: "Me"
+            }
+        };
+
+        const chatForm = document.getElementById("chatForm");
+        const chatBox = document.getElementById("chatBox");
+        const questionInput = document.getElementById("questionInput");
+        const knowledgeNameInput = document.getElementById("knowledgeName");
+        const languageSelect = document.getElementById("language");
+        const personalitySelect = document.getElementById("personality");
+        const answerStyleSelect = document.getElementById("answerStyle");
+        const modeSelect = document.getElementById("mode");
+        const pdfInput = document.getElementById("pdfInput");
+        const uploadBtn = document.getElementById("uploadBtn");
+        const uploadStatus = document.getElementById("uploadStatus");
+        const uploadFileName = document.getElementById("uploadFileName");
+
+        let chatHistory = [];
+
+        initApp();
+
+        async function initApp() {
+            loadSettings();
+            applyLanguage();
+            bindEvents();
+            updateKnowledgeTitle();
+            await loadServerHistory();
+        }
+
+        function bindEvents() {
+            chatForm.addEventListener("submit", handleAsk);
+            questionInput.addEventListener("keydown", function (e) {
+                if (e.key === "Enter" && !e.shiftKey) {
+                    e.preventDefault();
+                    chatForm.dispatchEvent(new Event("submit"));
+                }
+            });
+            knowledgeNameInput.addEventListener("input", function () { updateKnowledgeTitle(); saveSettings(); });
+            languageSelect.addEventListener("change", function () { applyLanguage(); saveSettings(); updateKnowledgeTitle(); renderHistory(); });
+            personalitySelect.addEventListener("change", saveSettings);
+            answerStyleSelect.addEventListener("change", saveSettings);
+            modeSelect.addEventListener("change", saveSettings);
+            pdfInput.addEventListener("change", function () {
+                const file = pdfInput.files[0];
+                if (file) uploadFileName.textContent = file.name;
+            });
+            uploadBtn.addEventListener("click", uploadPdf);
+        }
+
+        async function loadServerHistory() {
+            try {
+                const response = await fetch("/history");
+                const data = await response.json();
+                chatHistory = data.history || [];
+                renderHistory();
+            } catch (error) {
+                chatHistory = [];
+                renderHistory();
+            }
+        }
+
+        function renderHistory() {
+            const textMap = i18n[getSettings().language];
+            chatBox.innerHTML = "";
+            if (chatHistory.length === 0) {
+                renderMessage("ai", textMap.welcome);
+                return;
+            }
+            chatHistory.forEach(item => renderMessage(item.role, item.text));
+            chatBox.scrollTop = chatBox.scrollHeight;
+        }
+
+        async function handleAsk(e) {
+            e.preventDefault();
+            const question = questionInput.value.trim();
+            if (!question) return;
+
+            const settings = getSettings();
+            const textMap = i18n[settings.language];
+
+            renderMessage("user", question);
+            chatHistory.push({ role: "user", text: question });
+            questionInput.value = "";
+            const loadingId = renderMessage("ai", textMap.loading, true);
+
+            try {
+                const response = await fetch("/ask", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({
+                        question: question,
+                        personality: settings.personality,
+                        answer_style: settings.answerStyle,
+                        mode: settings.mode,
+                        knowledge_name: settings.knowledgeName,
+                        language: settings.language
+                    })
+                });
+                const data = await response.json();
+                const answer = data.answer || data.error || data.detail || textMap.requestError;
+                updateMessage(loadingId, answer);
+                chatHistory = data.history || [...chatHistory, { role: "ai", text: answer }];
+            } catch (error) {
+                updateMessage(loadingId, textMap.requestError);
+            }
+        }
+
+        async function uploadPdf() {
+            const settings = getSettings();
+            const textMap = i18n[settings.language];
+            const file = pdfInput.files[0];
+            if (!file) {
+                uploadStatus.textContent = textMap.choosePdfFirst;
+                uploadStatus.className = "upload-status error";
+                return;
+            }
+
+            const formData = new FormData();
+            formData.append("file", file);
+            formData.append("knowledge_name", settings.knowledgeName);
+            formData.append("language", settings.language);
+
+            uploadStatus.textContent = textMap.uploading;
+            uploadStatus.className = "upload-status";
+
+            try {
+                const response = await fetch("/upload", { method: "POST", body: formData });
+                const data = await response.json();
+                if (response.ok) {
+                    uploadStatus.textContent = data.message || textMap.uploadSuccess;
+                    uploadStatus.className = "upload-status success";
+                    renderMessage("ai", `${textMap.uploadedPrefix}${file.name}\n${textMap.uploadedSuffix}`);
+                } else {
+                    const errorMsg = data.error || data.detail || textMap.uploadFail;
+                    uploadStatus.textContent = errorMsg;
+                    uploadStatus.className = "upload-status error";
+                    renderMessage("ai", errorMsg);
+                }
+            } catch (error) {
+                uploadStatus.textContent = textMap.uploadError;
+                uploadStatus.className = "upload-status error";
+                renderMessage("ai", textMap.uploadError);
+            }
+        }
+
+        function renderMessage(role, text, returnId = false) {
+            const id = "msg-" + Date.now() + "-" + Math.random().toString(16).slice(2);
+            const textMap = i18n[getSettings().language];
+            const message = document.createElement("div");
+            message.className = "message " + role;
+            message.id = id;
+            const avatar = document.createElement("div");
+            avatar.className = "avatar";
+            avatar.textContent = role === "user" ? textMap.userAvatar : textMap.aiAvatar;
+            const bubble = document.createElement("div");
+            bubble.className = "bubble";
+            bubble.textContent = text;
+            message.appendChild(avatar);
+            message.appendChild(bubble);
+            chatBox.appendChild(message);
+            chatBox.scrollTop = chatBox.scrollHeight;
+            return returnId ? id : null;
+        }
+
+        function updateMessage(id, text) {
+            const message = document.getElementById(id);
+            if (!message) return;
+            const bubble = message.querySelector(".bubble");
+            bubble.textContent = text;
+            chatBox.scrollTop = chatBox.scrollHeight;
+        }
+
+        async function clearChat() {
+            try { await fetch("/clear_memory", { method: "POST" }); } catch (e) {}
+            chatHistory = [];
+            renderHistory();
+        }
+
+        function usePromptByKey(key) {
+            const textMap = i18n[getSettings().language];
+            const promptMap = { prompt1: textMap.prompt1Text, prompt2: textMap.prompt2Text, prompt3: textMap.prompt3Text };
+            questionInput.value = promptMap[key];
+            questionInput.focus();
+        }
+
+        function saveSettings() {
+            localStorage.setItem(STORAGE_KEYS.settings, JSON.stringify(getSettings()));
+        }
+
+        function loadSettings() {
+            let settings = {};
+            try { settings = JSON.parse(localStorage.getItem(STORAGE_KEYS.settings)) || {}; } catch { settings = {}; }
+            knowledgeNameInput.value = settings.knowledgeName || "";
+            languageSelect.value = settings.language || "zh";
+            personalitySelect.value = settings.personality || "professional";
+            answerStyleSelect.value = settings.answerStyle || "standard";
+            modeSelect.value = settings.mode || "knowledge";
+        }
+
+        function getSettings() {
+            return {
+                knowledgeName: knowledgeNameInput.value.trim(),
+                language: languageSelect.value,
+                personality: personalitySelect.value,
+                answerStyle: answerStyleSelect.value,
+                mode: modeSelect.value
+            };
+        }
+
+        function updateKnowledgeTitle() {
+            const settings = getSettings();
+            const textMap = i18n[settings.language];
+            const name = settings.knowledgeName || textMap.defaultKbName;
+            document.getElementById("kbTitle").textContent = name;
+            document.getElementById("chatPanelTitle").textContent = name + (settings.language === "en" ? " Chat" : " 对话");
+            document.title = name;
+        }
+
+        function updateSelectLabels(select, lang) {
+            Array.from(select.options).forEach(option => {
+                const label = option.getAttribute(lang === "en" ? "data-label-en" : "data-label-zh");
+                if (label) option.textContent = label;
+            });
+        }
+
+        function applyLanguage() {
+            const settings = getSettings();
+            const textMap = i18n[settings.language];
+            document.documentElement.lang = settings.language === "en" ? "en" : "zh-CN";
+            document.querySelectorAll("[data-i18n]").forEach(el => {
+                const key = el.getAttribute("data-i18n");
+                if (textMap[key]) el.textContent = textMap[key];
+            });
+            updateSelectLabels(personalitySelect, settings.language);
+            updateSelectLabels(answerStyleSelect, settings.language);
+            updateSelectLabels(modeSelect, settings.language);
+            questionInput.placeholder = textMap.placeholder;
+            knowledgeNameInput.placeholder = "";
+            updateKnowledgeTitle();
+        }
+    </script>
 </body>
 </html>
